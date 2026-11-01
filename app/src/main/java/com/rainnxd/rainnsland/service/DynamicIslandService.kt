@@ -126,9 +126,17 @@ class DynamicIslandService : Service(), LifecycleOwner, ViewModelStoreOwner, Sav
                         visibility = View.VISIBLE
                     }
 
+                    val isNotificationEvent = event is com.rainnxd.rainnsland.model.DynamicIslandEvent.Notification
+
+                    if (isExpanded && isNotificationEvent) {
+                        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                    } else {
+                        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    }
+
                     if (isExpanded) {
                         params.width = (380 * density).toInt()
-                        params.height = (240 * density).toInt()
+                        params.height = (320 * density).toInt()
                     } else {
                         params.width = (380 * density).toInt() // Keeps wide window buffer for satellite bubble!
                         params.height = (60 * density).toInt()
@@ -143,16 +151,18 @@ class DynamicIslandService : Service(), LifecycleOwner, ViewModelStoreOwner, Sav
                     }
                 }
 
-                DynamicIsland(
-                    event = event,
-                    isExpanded = isExpanded,
-                    onToggleExpand = {
-                        SharedIslandRepository.toggleExpand()
-                    },
-                    onTogglePlayPause = {
-                        SharedIslandRepository.togglePlayPause()
-                    }
-                )
+                com.rainnxd.rainnsland.ui.theme.RainnslandTheme {
+                    DynamicIsland(
+                        event = event,
+                        isExpanded = isExpanded,
+                        onToggleExpand = {
+                            SharedIslandRepository.toggleExpand()
+                        },
+                        onTogglePlayPause = {
+                            SharedIslandRepository.togglePlayPause()
+                        }
+                    )
+                }
             }
         }
 

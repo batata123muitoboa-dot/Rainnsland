@@ -19,6 +19,11 @@ import java.util.Locale
 
 class RainnNotificationListenerService : NotificationListenerService() {
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        startMediaSessionMonitoring()
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private var clockKey: Pair<String, Int>? = null
 
@@ -111,21 +116,66 @@ class RainnNotificationListenerService : NotificationListenerService() {
             packageName.substringAfterLast('.')
         }
 
+        // Extract Direct Reply RemoteInput if available (WhatsApp, Telegram, SMS, Wearable/Car Extenders)
+        var replyPendingIntent: android.app.PendingIntent? = null
+        var replyRemoteInput: android.app.RemoteInput? = null
+
+        // 1. Direct check on notification actions (Standard Android Reply)
+        notification.actions?.forEach { action ->
+            action.remoteInputs?.firstOrNull { ri ->
+                ri.allowFreeFormInput || (ri.resultKey != null && ri.resultKey.contains("reply", true))
+            }?.let { remoteInput ->
+                replyRemoteInput = remoteInput
+                replyPendingIntent = action.actionIntent
+            }
+        }
+
+        // 2. Check for action titled "Responder" or "Reply" even if allowFreeFormInput is false or custom
+        if (replyPendingIntent == null) {
+            notification.actions?.firstOrNull { action ->
+                val actionTitle = action.title?.toString() ?: ""
+                actionTitle.contains("Reply", true) ||
+                actionTitle.contains("Responder", true) ||
+                action.semanticAction == android.app.Notification.Action.SEMANTIC_ACTION_REPLY
+            }?.let { action ->
+                replyPendingIntent = action.actionIntent
+                replyRemoteInput = action.remoteInputs?.firstOrNull() ?: android.app.RemoteInput.Builder("key_text_reply").setLabel("Responder").build()
+            }
+        }
+
+        // 3. Fallback: Check WearableExtender for WhatsApp / Wear OS inline reply actions
+        if (replyPendingIntent == null) {
+            try {
+                val wearableExtender = androidx.core.app.NotificationCompat.WearableExtender(notification)
+                wearableExtender.actions.forEach { action ->
+                    action.remoteInputs?.firstOrNull()?.let { remoteInput ->
+                        replyRemoteInput = android.app.RemoteInput.Builder(remoteInput.resultKey)
+                            .setLabel(remoteInput.label)
+                            .setChoices(remoteInput.choices)
+                            .build()
+                        replyPendingIntent = action.actionIntent
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         SharedIslandRepository.setEvent(
             DynamicIslandEvent.Notification(
                 appName = appName,
                 title = title.ifBlank { appName },
                 text = text.ifBlank { allText },
-                packageName = packageName
+                packageName = packageName,
+                pendingIntent = replyPendingIntent,
+                remoteInput = replyRemoteInput,
+                sbnKey = sbn.key
             ),
             resetExpanded = false
         )
     }
 
-    override fun onListenerConnected() {
-        super.onListenerConnected()
-        startMediaSessionMonitoring()
-    }
+    // removed duplicate onListenerConnected
 
     private var activeMediaController: android.media.session.MediaController? = null
 
@@ -287,7 +337,16 @@ class RainnNotificationListenerService : NotificationListenerService() {
     }
 
     companion object {
+        private var instance: RainnNotificationListenerService? = null
         private var activeController: android.media.session.MediaController? = null
+
+        fun cancelNotificationByKey(key: String) {
+            try {
+                instance?.cancelNotification(key)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
 
         fun setActiveController(controller: android.media.session.MediaController?) {
             activeController = controller

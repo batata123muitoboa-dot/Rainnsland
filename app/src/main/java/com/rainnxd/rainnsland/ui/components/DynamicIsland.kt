@@ -29,7 +29,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.Intent
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
@@ -98,6 +102,25 @@ fun DynamicIsland(
     val isShowOnLockscreen by SharedIslandRepository.isShowOnLockscreen.collectAsState()
     val isServiceShuttingDown by SharedIslandRepository.isServiceShuttingDown.collectAsState()
     val eventChangeTrigger by SharedIslandRepository.eventChangeTrigger.collectAsState()
+
+    val chargingLevel = if (event is DynamicIslandEvent.Battery && event.isCharging) event.level.toFloat() else 0f
+
+    var waveTime by remember { mutableStateOf(0f) }
+    LaunchedEffect(event) {
+        if (event is DynamicIslandEvent.Battery && event.isCharging) {
+            val startTime = System.currentTimeMillis()
+            while (true) {
+                waveTime = (System.currentTimeMillis() - startTime) / 1000f
+                delay(50)
+            }
+        }
+    }
+
+    val animatedFill by animateFloatAsState(
+        targetValue = chargingLevel / 100f,
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "liquid_fill_animation"
+    )
 
     var orbitProgress by remember { mutableStateOf(0f) }
     var glowAlpha by remember { mutableStateOf(0f) }
@@ -271,6 +294,48 @@ fun DynamicIsland(
                     }
                     .clip(RoundedCornerShape(currentCorner))
                     .background(Color(0xFF000000))
+                    .drawBehind {
+                        if (event is DynamicIslandEvent.Battery && event.isCharging) {
+                            if (!isExpanded) {
+                                val fillWidth = size.width * animatedFill
+                                val path = androidx.compose.ui.graphics.Path().apply {
+                                    val corner = currentCorner.toPx()
+                                    addRoundRect(
+                                        androidx.compose.ui.geometry.RoundRect(
+                                            left = 0f,
+                                            top = 0f,
+                                            right = fillWidth,
+                                            bottom = size.height,
+                                            radiusX = corner,
+                                            radiusY = corner
+                                        )
+                                    )
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = Color(0xFF00E676).copy(alpha = 0.5f)
+                                )
+                            } else {
+                                // Organic continuous moving waves when expanded!
+                                val wavePath = androidx.compose.ui.graphics.Path().apply {
+                                    moveTo(0f, size.height)
+                                    val waveHeight = 6f * scale
+                                    val freq = 0.05f
+                                    for (x in 0..size.width.toInt() step 5) {
+                                        val y = size.height - (size.height * (event.level / 100f)) +
+                                                kotlin.math.sin(x * freq + waveTime * 4f) * waveHeight
+                                        lineTo(x.toFloat(), y)
+                                    }
+                                    lineTo(size.width, size.height)
+                                    close()
+                                }
+                                drawPath(
+                                    path = wavePath,
+                                    color = Color(0xFF00E676).copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
                     .padding(horizontal = lerpDp((10 * scale).dp, (16 * scale).dp, progress), vertical = lerpDp((6 * scale).dp, (12 * scale).dp, progress)),
                 contentAlignment = Alignment.TopCenter
             ) {
@@ -352,14 +417,14 @@ fun DynamicIsland(
                                         modifier = Modifier
                                             .size((24 * scale).dp)
                                             .clip(CircleShape)
-                                            .background(if (event.isCharging) Color(0xFFFFD600) else Color(0xFF00E5FF)),
+                                            .background(Color(0xFF00E676)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = "${event.level}%",
-                                            color = Color.Black,
-                                            fontSize = (9 * scale).sp,
-                                            fontWeight = FontWeight.ExtraBold
+                                        Icon(
+                                            imageVector = if (event.isCharging) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull,
+                                            contentDescription = null,
+                                            tint = Color.Black,
+                                            modifier = Modifier.size((14 * scale).dp)
                                         )
                                     }
                                 }
@@ -457,7 +522,7 @@ fun DynamicIsland(
                                 }
                                 is DynamicIslandEvent.Battery -> {
                                     Text(
-                                        text = if (event.isCharging) "⚡" else "${event.level}%",
+                                        text = "${event.level}%",
                                         color = Color.White,
                                         fontSize = (11 * scale).sp,
                                         fontWeight = FontWeight.Bold
@@ -710,20 +775,20 @@ fun DynamicIsland(
                                     ) {
                                         Column {
                                             Text(
-                                                text = "Battery Info",
+                                                text = if (event.isCharging) "Charging (${event.level}%)" else "Discharging (${event.level}%)",
                                                 color = Color.White,
                                                 fontSize = (15 * scale).sp,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                text = if (event.isCharging) event.chargingSpeed else "Discharging",
-                                                color = Color.Gray,
+                                                text = if (event.isCharging) event.chargingSpeed else "Battery Level: ${event.level}%",
+                                                color = Color(0xFF00E676),
                                                 fontSize = (13 * scale).sp
                                             )
                                         }
                                         Text(
                                             text = "${event.level}%",
-                                            color = if (event.isCharging) Color(0xFFFFD600) else Color(0xFF00E5FF),
+                                            color = Color(0xFF00E676),
                                             fontSize = (24 * scale).sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -792,27 +857,92 @@ fun DynamicIsland(
                                 }
 
                                 is DynamicIslandEvent.Notification -> {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "${event.appName} • ${event.title}",
-                                                color = Color(0xFFFF9100),
-                                                fontSize = (14 * scale).sp,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1
+                                    val context = androidx.compose.ui.platform.LocalContext.current
+                                    var replyText by remember { mutableStateOf("") }
+
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "${event.appName} • ${event.title}",
+                                            color = Color(0xFFFF9100),
+                                            fontSize = (14 * scale).sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = event.text,
+                                            color = Color.White,
+                                            fontSize = (13 * scale).sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        // Reply Input Box (Shows for all messages or fallback reply)
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            androidx.compose.material3.TextField(
+                                                value = replyText,
+                                                onValueChange = { replyText = it },
+                                                placeholder = {
+                                                    Text(
+                                                        text = "Responder...",
+                                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                        fontSize = 13.sp
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(50.dp)
+                                                    .clip(CircleShape),
+                                                singleLine = true,
+                                                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                                    focusedContainerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                    unfocusedContainerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer,
+                                                    focusedIndicatorColor = Color.Transparent,
+                                                    unfocusedIndicatorColor = Color.Transparent,
+                                                    disabledIndicatorColor = Color.Transparent,
+                                                    focusedTextColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                                                    unfocusedTextColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                                )
                                             )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = event.text,
-                                                color = Color.White,
-                                                fontSize = (13 * scale).sp,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            IconButton(
+                                                onClick = {
+                                                    if (replyText.isNotBlank()) {
+                                                        try {
+                                                            if (event.pendingIntent != null && event.remoteInput != null) {
+                                                                val intent = Intent().apply {
+                                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                }
+                                                                val bundle = android.os.Bundle()
+                                                                bundle.putCharSequence(event.remoteInput.resultKey, replyText)
+                                                                android.app.RemoteInput.addResultsToIntent(arrayOf(event.remoteInput), intent, bundle)
+                                                                event.pendingIntent.send(context, 0, intent)
+                                                            } else if (event.sbnKey != null) {
+                                                                com.rainnxd.rainnsland.service.RainnNotificationListenerService.cancelNotificationByKey(event.sbnKey)
+                                                            }
+                                                            replyText = ""
+                                                            SharedIslandRepository.setEvent(DynamicIslandEvent.None)
+                                                        } catch (e: Exception) {
+                                                            e.printStackTrace()
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .background(androidx.compose.material3.MaterialTheme.colorScheme.primary)
+                                            ) {
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+                                                    contentDescription = "Enviar",
+                                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }

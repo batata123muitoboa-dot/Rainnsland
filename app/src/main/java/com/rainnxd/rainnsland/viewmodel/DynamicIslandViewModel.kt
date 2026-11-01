@@ -50,6 +50,7 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
     private val wattageHistory = mutableListOf<Float>()
 
     init {
+        SharedIslandRepository.initPrefs(application)
         startRealBatteryMonitoring(application)
         startRealCallMonitoring()
         startMusicSimulation()
@@ -223,10 +224,6 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
         SharedIslandRepository.toggleExpand()
     }
 
-    fun togglePlayPause() {
-        SharedIslandRepository.togglePlayPause()
-    }
-
     private fun startRealBatteryMonitoring(context: Context) {
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
 
@@ -302,10 +299,10 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
                 0.0f
             }
 
-            // If rawWatts is 0 or unmeasured by hardware, provide realistic baseline based on charging type, else smooth with moving average
+            // If rawWatts is 0 or unmeasured by hardware, try not to invent wattage, else smooth with moving average
             val effectiveWatts = if (rawWatts <= 0.1f) {
-                // Fallback realistic estimation when hardware current sensor is locked/unsupported
-                10.0f // Typical standard wall charger baseline
+                // Fallback for when the sensor is locked or etc.
+                0.0f
             } else {
                 wattageHistory.add(rawWatts)
                 if (wattageHistory.size > 5) {
@@ -351,6 +348,13 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
                 ),
                 resetExpanded = false
             )
+        } else if (!isCharging && !showBatteryWhenDischarging) {
+            // If we just unplugged and discharging view is disabled, dismiss the battery event immediately!
+            val current = SharedIslandRepository.currentEvent.value
+            val sec = SharedIslandRepository.secondaryEvent.value
+            if (current is DynamicIslandEvent.Battery || sec is DynamicIslandEvent.Battery) {
+                SharedIslandRepository.setEvent(DynamicIslandEvent.None, resetExpanded = false)
+            }
         }
     }
 

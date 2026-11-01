@@ -52,8 +52,11 @@ sealed class DynamicIslandEvent(
         val appName: String,
         val title: String,
         val text: String,
-        val packageName: String
-    ) : DynamicIslandEvent(130.dp, 340.dp, 130.dp)
+        val packageName: String,
+        val pendingIntent: android.app.PendingIntent? = null,
+        val remoteInput: android.app.RemoteInput? = null,
+        val sbnKey: String? = null
+    ) : DynamicIslandEvent(130.dp, 340.dp, 160.dp)
 
     data class RingMode(
         val mode: Int, // AudioManager.RINGER_MODE_NORMAL, VIBRATE, SILENT

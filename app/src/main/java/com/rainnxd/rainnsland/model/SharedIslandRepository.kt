@@ -1,6 +1,9 @@
 package com.rainnxd.rainnsland.model
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +15,9 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 object SharedIslandRepository {
+
+    private const val PREFS_NAME = "rainnsland_island_prefs"
+    private var prefs: SharedPreferences? = null
 
     private val _currentEvent = MutableStateFlow<DynamicIslandEvent>(
         DynamicIslandEvent.None
@@ -92,15 +98,42 @@ object SharedIslandRepository {
     private val _secondaryEvent = MutableStateFlow<DynamicIslandEvent>(DynamicIslandEvent.None)
     val secondaryEvent: StateFlow<DynamicIslandEvent> = _secondaryEvent.asStateFlow()
 
+    fun initPrefs(context: Context) {
+        if (prefs != null) return
+        val p = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs = p
+
+        // Load persisted values
+        _offsetY.value = p.getInt("offsetY", 16)
+        _expandedOffsetY.value = p.getInt("expandedOffsetY", 20)
+        _scale.value = p.getFloat("scale", 1.0f)
+        _customWidthOffset.value = p.getInt("customWidthOffset", 0)
+        _customHeightOffset.value = p.getInt("customHeightOffset", 0)
+        _isGlowEnabled.value = p.getBoolean("isGlowEnabled", true)
+        _glowColor.value = Color(p.getInt("glowColor", Color(0xFF00E5FF).toArgb()))
+        _isAlwaysShowIdle.value = p.getBoolean("isAlwaysShowIdle", false)
+        _showBatteryIdle.value = p.getBoolean("showBatteryIdle", false)
+        _alwaysShowCharging.value = p.getBoolean("alwaysShowCharging", false)
+        _isChargingDetectionEnabled.value = p.getBoolean("isChargingDetectionEnabled", false)
+        _isBluetoothDetectionEnabled.value = p.getBoolean("isBluetoothDetectionEnabled", false)
+        _isNotificationListenerEnabled.value = p.getBoolean("isNotificationListenerEnabled", false)
+        _isMusicDetectionEnabled.value = p.getBoolean("isMusicDetectionEnabled", false)
+        _isCallDetectionEnabled.value = p.getBoolean("isCallDetectionEnabled", false)
+        _isRingModeDetectionEnabled.value = p.getBoolean("isRingModeDetectionEnabled", false)
+        _isShowOnLockscreen.value = p.getBoolean("isShowOnLockscreen", true)
+        _isHideOnQuickSettings.value = p.getBoolean("isHideOnQuickSettings", false)
+    }
+
     fun setEvent(event: DynamicIslandEvent, resetExpanded: Boolean = true) {
         val current = _currentEvent.value
 
-        // If it's just a battery update (% or Watts changing) and type is already Battery, update silently WITHOUT glow
         if (current is DynamicIslandEvent.Battery && event is DynamicIslandEvent.Battery) {
-            if (current.isCharging == event.isCharging) {
-                _currentEvent.value = event
-                return
+            _currentEvent.value = event
+            val sec = _secondaryEvent.value
+            if (sec is DynamicIslandEvent.Battery) {
+                _secondaryEvent.value = event
             }
+            return
         }
 
         if (event is DynamicIslandEvent.None) {
@@ -114,45 +147,63 @@ object SharedIslandRepository {
             return
         }
 
-        // Smart secondary bubble handling: if user is listening to music and plugs in charger (Battery event), show Battery as a secondary floating bubble!
         if (current is DynamicIslandEvent.Music && event is DynamicIslandEvent.Battery) {
             _secondaryEvent.value = event
-            if (!eventQueue.contains(event)) eventQueue.add(event)
-            _eventChangeTrigger.value = System.currentTimeMillis()
+            scheduleAutoDismissForSecondaryBattery()
             return
         }
 
+        if (current is DynamicIslandEvent.Call && (event is DynamicIslandEvent.Music || event is DynamicIslandEvent.Battery)) {
+            _secondaryEvent.value = event
+            if (event is DynamicIslandEvent.Battery) {
+                scheduleAutoDismissForSecondaryBattery()
+            }
+            return
+        }
+
+        autoDismissJob?.cancel()
+        timerTickerJob?.cancel()
+
         _currentEvent.value = event
+        _eventChangeTrigger.value = System.currentTimeMillis()
         if (resetExpanded) {
             _isExpanded.value = false
         }
-        _secondaryEvent.value = DynamicIslandEvent.None
-        eventQueue.clear()
-        _eventChangeTrigger.value = System.currentTimeMillis()
 
-        autoDismissJob?.cancel()
-        if (event is DynamicIslandEvent.Notification) {
-            scheduleAutoDismissForNotification()
-        } else if (event is DynamicIslandEvent.Battery && (!event.isCharging || !_alwaysShowCharging.value)) {
-            scheduleAutoDismissForBattery()
-        } else if (event is DynamicIslandEvent.RingMode) {
-            scheduleAutoDismissForRingMode()
+        when (event) {
+            is DynamicIslandEvent.Notification -> {
+                scheduleAutoDismissForNotification()
+            }
+            is DynamicIslandEvent.Battery -> {
+                if (!event.isCharging || !_alwaysShowCharging.value) {
+                    scheduleAutoDismissForBattery()
+                }
+            }
+            is DynamicIslandEvent.RingMode -> {
+                scheduleAutoDismissForRingMode()
+            }
+            is DynamicIslandEvent.Timer -> {
+                startTimerCountdown(event)
+            }
+            else -> {}
         }
+    }
 
-        if (event is DynamicIslandEvent.Timer) {
-            startTimerTicker(event.timeRemaining)
-        } else {
-            timerTickerJob?.cancel()
+    private fun scheduleAutoDismissForSecondaryBattery() {
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(3000)
+            if (_secondaryEvent.value is DynamicIslandEvent.Battery) {
+                _secondaryEvent.value = DynamicIslandEvent.None
+            }
         }
     }
 
     private fun scheduleAutoDismissForNotification() {
         autoDismissJob?.cancel()
         autoDismissJob = CoroutineScope(Dispatchers.Main).launch {
-            delay(3000)
+            delay(4000)
             if (!_isExpanded.value) {
-                _currentEvent.value = eventQueue.removeOrNone()
-                _secondaryEvent.value = DynamicIslandEvent.None
+                setEvent(DynamicIslandEvent.None)
             }
         }
     }
@@ -162,8 +213,7 @@ object SharedIslandRepository {
         autoDismissJob = CoroutineScope(Dispatchers.Main).launch {
             delay(3000)
             if (!_isExpanded.value) {
-                _currentEvent.value = eventQueue.removeOrNone()
-                _secondaryEvent.value = DynamicIslandEvent.None
+                setEvent(DynamicIslandEvent.None)
             }
         }
     }
@@ -171,60 +221,40 @@ object SharedIslandRepository {
     private fun scheduleAutoDismissForRingMode() {
         autoDismissJob?.cancel()
         autoDismissJob = CoroutineScope(Dispatchers.Main).launch {
-            delay(3000)
+            delay(2500)
             if (!_isExpanded.value) {
-                _currentEvent.value = eventQueue.removeOrNone()
-                _secondaryEvent.value = DynamicIslandEvent.None
+                setEvent(DynamicIslandEvent.None)
             }
         }
     }
 
-    private fun MutableList<DynamicIslandEvent>.removeOrNone(): DynamicIslandEvent {
-        return if (this.isNotEmpty()) this.removeAt(0) else DynamicIslandEvent.None
-    }
-
-    fun cycleEvents() {
-        val curr = _currentEvent.value
-        val sec = _secondaryEvent.value
-        if (sec !is DynamicIslandEvent.None) {
-            _currentEvent.value = sec
-            _secondaryEvent.value = curr
-        }
-    }
-
-    private fun startTimerTicker(initialTimeStr: String) {
+    private fun startTimerCountdown(initialEvent: DynamicIslandEvent.Timer) {
         timerTickerJob?.cancel()
-        val totalSeconds = parseTimeToSeconds(initialTimeStr) ?: return
-        if (totalSeconds <= 0) return
+        var currentSeconds = parseTimeToSeconds(initialEvent.timeRemaining) ?: return
 
         timerTickerJob = CoroutineScope(Dispatchers.Main).launch {
-            var remaining = totalSeconds
-            while (remaining > 0) {
+            while (currentSeconds > 0) {
                 delay(1000)
-                remaining--
-                val formatted = formatSecondsToTime(remaining)
+                currentSeconds--
+                val formattedTime = formatSecondsToTime(currentSeconds)
                 val current = _currentEvent.value
                 if (current is DynamicIslandEvent.Timer) {
                     _currentEvent.value = current.copy(
-                        timeRemaining = formatted,
-                        progress = remaining.toFloat() / totalSeconds.toFloat()
+                        timeRemaining = formattedTime,
+                        progress = currentSeconds.toFloat() / 300f
                     )
                 } else {
                     break
                 }
             }
-        }
-    }
-
-    fun togglePlayPause() {
-        val current = _currentEvent.value
-        if (current is DynamicIslandEvent.Music) {
-            _currentEvent.value = current.copy(isPlaying = !current.isPlaying)
+            if (currentSeconds <= 0) {
+                setEvent(DynamicIslandEvent.None)
+            }
         }
     }
 
     private fun parseTimeToSeconds(timeStr: String): Int? {
-        val parts = timeStr.trim().split(":")
+        val parts = timeStr.split(":")
         return when (parts.size) {
             2 -> {
                 val mins = parts[0].toIntOrNull() ?: return null
@@ -234,7 +264,7 @@ object SharedIslandRepository {
             3 -> {
                 val hrs = parts[0].toIntOrNull() ?: return null
                 val mins = parts[1].toIntOrNull() ?: return null
-                val secs = parts[2].toIntOrNull() ?: return null // Fixed index 2!
+                val secs = parts[2].toIntOrNull() ?: return null
                 hrs * 3600 + mins * 60 + secs
             }
             else -> null
@@ -252,6 +282,25 @@ object SharedIslandRepository {
         }
     }
 
+    fun togglePlayPause() {
+        val current = _currentEvent.value
+        if (current is DynamicIslandEvent.Music) {
+            _currentEvent.value = current.copy(isPlaying = !current.isPlaying)
+        }
+    }
+
+    fun cycleEvents() {
+        if (eventQueue.isNotEmpty()) {
+            val next = eventQueue.removeAt(0)
+            val oldCurrent = _currentEvent.value
+            if (oldCurrent !is DynamicIslandEvent.None) {
+                eventQueue.add(oldCurrent)
+            }
+            _currentEvent.value = next
+            _secondaryEvent.value = eventQueue.firstOrNull() ?: DynamicIslandEvent.None
+        }
+    }
+
     fun updateMusicProgress(progress: Float) {
         val current = _currentEvent.value
         if (current is DynamicIslandEvent.Music) {
@@ -264,7 +313,6 @@ object SharedIslandRepository {
         if (_isExpanded.value) {
             autoDismissJob?.cancel()
         } else {
-            // Restart auto dismiss from scratch when collapsed if event is notification or temporary battery
             val current = _currentEvent.value
             if (current is DynamicIslandEvent.Notification) {
                 scheduleAutoDismissForNotification()
@@ -281,7 +329,6 @@ object SharedIslandRepository {
         if (expanded) {
             autoDismissJob?.cancel()
         } else {
-            // Restart auto dismiss from scratch when collapsed if event is notification or temporary battery
             val current = _currentEvent.value
             if (current is DynamicIslandEvent.Notification) {
                 scheduleAutoDismissForNotification()
@@ -295,70 +342,87 @@ object SharedIslandRepository {
 
     fun setOffsetY(y: Int) {
         _offsetY.value = y
+        prefs?.edit()?.putInt("offsetY", y)?.apply()
     }
 
     fun setChargingDetectionEnabled(enabled: Boolean) {
         _isChargingDetectionEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isChargingDetectionEnabled", enabled)?.apply()
     }
 
     fun setBluetoothDetectionEnabled(enabled: Boolean) {
         _isBluetoothDetectionEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isBluetoothDetectionEnabled", enabled)?.apply()
     }
 
     fun setExpandedOffsetY(y: Int) {
         _expandedOffsetY.value = y
+        prefs?.edit()?.putInt("expandedOffsetY", y)?.apply()
     }
 
     fun setScale(scaleValue: Float) {
         _scale.value = scaleValue
+        prefs?.edit()?.putFloat("scale", scaleValue)?.apply()
     }
 
     fun setCustomWidthOffset(offset: Int) {
         _customWidthOffset.value = offset
+        prefs?.edit()?.putInt("customWidthOffset", offset)?.apply()
     }
 
     fun setCustomHeightOffset(offset: Int) {
         _customHeightOffset.value = offset
+        prefs?.edit()?.putInt("customHeightOffset", offset)?.apply()
     }
 
     fun setGlowEnabled(enabled: Boolean) {
         _isGlowEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isGlowEnabled", enabled)?.apply()
     }
 
     fun setGlowColor(color: Color) {
         _glowColor.value = color
+        prefs?.edit()?.putInt("glowColor", color.toArgb())?.apply()
     }
 
     fun setAlwaysShowIdle(enabled: Boolean) {
         _isAlwaysShowIdle.value = enabled
+        prefs?.edit()?.putBoolean("isAlwaysShowIdle", enabled)?.apply()
     }
 
     fun setShowBatteryIdle(enabled: Boolean) {
         _showBatteryIdle.value = enabled
+        prefs?.edit()?.putBoolean("showBatteryIdle", enabled)?.apply()
     }
 
     fun setNotificationListenerEnabled(enabled: Boolean) {
         _isNotificationListenerEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isNotificationListenerEnabled", enabled)?.apply()
     }
 
     fun setMusicDetectionEnabled(enabled: Boolean) {
         _isMusicDetectionEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isMusicDetectionEnabled", enabled)?.apply()
     }
 
     fun setCallDetectionEnabled(enabled: Boolean) {
         _isCallDetectionEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isCallDetectionEnabled", enabled)?.apply()
     }
 
     fun setRingModeDetectionEnabled(enabled: Boolean) {
         _isRingModeDetectionEnabled.value = enabled
+        prefs?.edit()?.putBoolean("isRingModeDetectionEnabled", enabled)?.apply()
     }
 
     fun setShowOnLockscreen(enabled: Boolean) {
         _isShowOnLockscreen.value = enabled
+        prefs?.edit()?.putBoolean("isShowOnLockscreen", enabled)?.apply()
     }
 
     fun setHideOnQuickSettings(enabled: Boolean) {
         _isHideOnQuickSettings.value = enabled
+        prefs?.edit()?.putBoolean("isHideOnQuickSettings", enabled)?.apply()
     }
 
     fun setQuickSettingsOpen(open: Boolean) {
@@ -371,6 +435,7 @@ object SharedIslandRepository {
 
     fun setAlwaysShowCharging(enabled: Boolean) {
         _alwaysShowCharging.value = enabled
+        prefs?.edit()?.putBoolean("alwaysShowCharging", enabled)?.apply()
         val current = _currentEvent.value
         if (enabled && current is DynamicIslandEvent.Battery && current.isCharging) {
             autoDismissJob?.cancel()
