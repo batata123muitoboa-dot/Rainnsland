@@ -122,10 +122,7 @@ class RainnAccessibilityService : AccessibilityService(), LifecycleOwner, ViewMo
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                    WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS or
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
+                    WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -149,18 +146,16 @@ class RainnAccessibilityService : AccessibilityService(), LifecycleOwner, ViewMo
                 @Suppress("DEPRECATION")
                 LaunchedEffect(isExpanded, offsetY, isShowOnLockscreen) {
                     params.y = (offsetY * density).toInt()
-                    visibility = View.VISIBLE
 
                     val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
                     val isLocked = keyguardManager?.isKeyguardLocked == true
 
-                    if (isShowOnLockscreen) {
-                        params.flags = params.flags or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                    if (isLocked && !isShowOnLockscreen) {
+                        visibility = View.GONE
+                        return@LaunchedEffect
                     } else {
-                        params.flags = params.flags and (WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD).inv()
+                        visibility = View.VISIBLE
                     }
-
-                    visibility = if (isLocked && !isShowOnLockscreen) View.GONE else View.VISIBLE
 
                     if (isExpanded) {
                         params.width = (380 * density).toInt()

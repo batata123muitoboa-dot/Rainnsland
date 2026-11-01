@@ -153,9 +153,8 @@ fun DynamicIsland(
             !isServiceShuttingDown && !(isHideOnQuickSettings && isQuickSettingsOpen) &&
             !(isLocked && !isShowOnLockscreen)
 
-    // Smooth visibility animation (shrinking width into camera punch hole and fading out)
     val visibilityProgress by animateFloatAsState(
-        targetValue = if (shouldBeVisible) 1f else 0f,
+        targetValue = if (shouldBeVisible && !(isLocked && !isShowOnLockscreen)) 1f else 0f,
         animationSpec = tween(
             durationMillis = 240,
             easing = FastOutSlowInEasing
@@ -201,6 +200,10 @@ fun DynamicIsland(
     // Secondary event (satellite bubble) state
     val secondaryEvent by SharedIslandRepository.secondaryEvent.collectAsState()
     val hasSecondary = secondaryEvent !is DynamicIslandEvent.None
+
+    if (currentAlpha <= 0f) {
+        return
+    }
 
     Box(
         modifier = modifier.fillMaxWidth(),
