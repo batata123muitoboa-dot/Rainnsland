@@ -93,7 +93,8 @@ class DynamicIslandService : Service(), LifecycleOwner, ViewModelStoreOwner, Sav
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS or
                     WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -119,11 +120,16 @@ class DynamicIslandService : Service(), LifecycleOwner, ViewModelStoreOwner, Sav
                     params.y = (offsetY * density).toInt()
                     visibility = View.VISIBLE
 
+                    val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
+                    val isLocked = keyguardManager?.isKeyguardLocked == true
+
                     if (isShowOnLockscreen) {
                         params.flags = params.flags or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                     } else {
-                        params.flags = params.flags and (WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON).inv()
+                        params.flags = params.flags and (WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD).inv()
                     }
+
+                    visibility = if (isLocked && !isShowOnLockscreen) View.GONE else View.VISIBLE
 
                     if (isExpanded) {
                         params.width = (380 * density).toInt()

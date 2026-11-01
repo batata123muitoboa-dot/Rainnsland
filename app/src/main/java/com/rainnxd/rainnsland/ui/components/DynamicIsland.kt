@@ -95,6 +95,7 @@ fun DynamicIsland(
     val isAlwaysShowIdle by SharedIslandRepository.isAlwaysShowIdle.collectAsState()
     val isHideOnQuickSettings by SharedIslandRepository.isHideOnQuickSettings.collectAsState()
     val isQuickSettingsOpen by SharedIslandRepository.isQuickSettingsOpen.collectAsState()
+    val isShowOnLockscreen by SharedIslandRepository.isShowOnLockscreen.collectAsState()
     val isServiceShuttingDown by SharedIslandRepository.isServiceShuttingDown.collectAsState()
     val eventChangeTrigger by SharedIslandRepository.eventChangeTrigger.collectAsState()
 
@@ -145,8 +146,12 @@ fun DynamicIsland(
     }).value * scale + customHeightOffset).dp
 
     // Should this island be visible or shrink into camera?
+    val localContext = LocalContext.current
+    val keyguardManager = localContext.getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+    val isLocked = keyguardManager?.isKeyguardLocked == true
     val shouldBeVisible = !(event is DynamicIslandEvent.None && !isAlwaysShowIdle && !isExpanded) &&
-            !isServiceShuttingDown && !(isHideOnQuickSettings && isQuickSettingsOpen)
+            !isServiceShuttingDown && !(isHideOnQuickSettings && isQuickSettingsOpen) &&
+            !(isLocked && !isShowOnLockscreen)
 
     // Smooth visibility animation (shrinking width into camera punch hole and fading out)
     val visibilityProgress by animateFloatAsState(
