@@ -135,6 +135,8 @@ object SharedIslandRepository {
             scheduleAutoDismissForNotification()
         } else if (event is DynamicIslandEvent.Battery && (!event.isCharging || !_alwaysShowCharging.value)) {
             scheduleAutoDismissForBattery()
+        } else if (event is DynamicIslandEvent.RingMode) {
+            scheduleAutoDismissForRingMode()
         }
 
         if (event is DynamicIslandEvent.Timer) {
@@ -156,6 +158,17 @@ object SharedIslandRepository {
     }
 
     private fun scheduleAutoDismissForBattery() {
+        autoDismissJob?.cancel()
+        autoDismissJob = CoroutineScope(Dispatchers.Main).launch {
+            delay(3000)
+            if (!_isExpanded.value) {
+                _currentEvent.value = eventQueue.removeOrNone()
+                _secondaryEvent.value = DynamicIslandEvent.None
+            }
+        }
+    }
+
+    private fun scheduleAutoDismissForRingMode() {
         autoDismissJob?.cancel()
         autoDismissJob = CoroutineScope(Dispatchers.Main).launch {
             delay(3000)
@@ -257,6 +270,8 @@ object SharedIslandRepository {
                 scheduleAutoDismissForNotification()
             } else if (current is DynamicIslandEvent.Battery && (!current.isCharging || !_alwaysShowCharging.value)) {
                 scheduleAutoDismissForBattery()
+            } else if (current is DynamicIslandEvent.RingMode) {
+                scheduleAutoDismissForRingMode()
             }
         }
     }
@@ -272,6 +287,8 @@ object SharedIslandRepository {
                 scheduleAutoDismissForNotification()
             } else if (current is DynamicIslandEvent.Battery && (!current.isCharging || !_alwaysShowCharging.value)) {
                 scheduleAutoDismissForBattery()
+            } else if (current is DynamicIslandEvent.RingMode) {
+                scheduleAutoDismissForRingMode()
             }
         }
     }
@@ -322,6 +339,10 @@ object SharedIslandRepository {
 
     fun setNotificationListenerEnabled(enabled: Boolean) {
         _isNotificationListenerEnabled.value = enabled
+    }
+
+    fun setMusicDetectionEnabled(enabled: Boolean) {
+        _isMusicDetectionEnabled.value = enabled
     }
 
     fun setCallDetectionEnabled(enabled: Boolean) {

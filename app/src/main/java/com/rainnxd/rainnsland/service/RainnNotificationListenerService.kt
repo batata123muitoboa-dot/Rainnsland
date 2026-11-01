@@ -130,16 +130,23 @@ class RainnNotificationListenerService : NotificationListenerService() {
     private var activeMediaController: android.media.session.MediaController? = null
 
     private fun startMediaSessionMonitoring() {
+        if (!SharedIslandRepository.isMusicDetectionEnabled.value) return
         try {
             val mediaSessionManager = getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
             val componentName = android.content.ComponentName(this, RainnNotificationListenerService::class.java)
             
             mediaSessionManager?.addOnActiveSessionsChangedListener({ controllers ->
-                updateActiveController(controllers)
+                if (SharedIslandRepository.isMusicDetectionEnabled.value) {
+                    updateActiveController(controllers)
+                } else {
+                    updateActiveController(emptyList())
+                }
             }, componentName)
 
-            val controllers = mediaSessionManager?.getActiveSessions(componentName)
-            updateActiveController(controllers)
+            if (SharedIslandRepository.isMusicDetectionEnabled.value) {
+                val controllers = mediaSessionManager?.getActiveSessions(componentName)
+                updateActiveController(controllers)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

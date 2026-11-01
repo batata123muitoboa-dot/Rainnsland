@@ -29,17 +29,19 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.sharp.Headphones
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -370,10 +372,10 @@ fun DynamicIsland(
                                     }
                                 }
                                 is DynamicIslandEvent.RingMode -> {
-                                    val icon = when (event.mode) {
-                                        android.media.AudioManager.RINGER_MODE_SILENT -> "🔇"
-                                        android.media.AudioManager.RINGER_MODE_VIBRATE -> "📳"
-                                        else -> "🔔"
+                                    val iconVector = when (event.mode) {
+                                        android.media.AudioManager.RINGER_MODE_SILENT -> Icons.Default.NotificationsOff
+                                        android.media.AudioManager.RINGER_MODE_VIBRATE -> Icons.Default.Vibration
+                                        else -> Icons.Default.Notifications
                                     }
                                     Box(
                                         modifier = Modifier
@@ -382,9 +384,11 @@ fun DynamicIsland(
                                             .background(Color.DarkGray),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = icon,
-                                            fontSize = (12 * scale).sp
+                                        Icon(
+                                            imageVector = iconVector,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size((14 * scale).dp)
                                         )
                                     }
                                 }

@@ -37,6 +37,7 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
     val isChargingDetectionEnabled: StateFlow<Boolean> = SharedIslandRepository.isChargingDetectionEnabled
     val isBluetoothDetectionEnabled: StateFlow<Boolean> = SharedIslandRepository.isBluetoothDetectionEnabled
     val isNotificationListenerEnabled: StateFlow<Boolean> = SharedIslandRepository.isNotificationListenerEnabled
+    val isMusicDetectionEnabled: StateFlow<Boolean> = SharedIslandRepository.isMusicDetectionEnabled
     val isCallDetectionEnabled: StateFlow<Boolean> = SharedIslandRepository.isCallDetectionEnabled
     val isRingModeDetectionEnabled: StateFlow<Boolean> = SharedIslandRepository.isRingModeDetectionEnabled
     val isShowOnLockscreen: StateFlow<Boolean> = SharedIslandRepository.isShowOnLockscreen
@@ -141,6 +142,10 @@ class DynamicIslandViewModel(application: Application) : AndroidViewModel(applic
 
     fun setNotificationListenerEnabled(enabled: Boolean) {
         SharedIslandRepository.setNotificationListenerEnabled(enabled)
+    }
+
+    fun setMusicDetectionEnabled(enabled: Boolean) {
+        SharedIslandRepository.setMusicDetectionEnabled(enabled)
     }
 
     fun setChargingDetectionEnabled(enabled: Boolean) {

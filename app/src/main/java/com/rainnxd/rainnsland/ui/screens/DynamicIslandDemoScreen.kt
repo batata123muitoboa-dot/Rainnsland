@@ -87,6 +87,7 @@ fun DynamicIslandDemoScreen(
     val showBatteryIdle by viewModel.showBatteryIdle.collectAsState()
     val alwaysShowCharging by viewModel.alwaysShowCharging.collectAsState()
     val isNotificationListenerEnabled by viewModel.isNotificationListenerEnabled.collectAsState()
+    val isMusicDetectionEnabled by viewModel.isMusicDetectionEnabled.collectAsState()
     val isCallDetectionEnabled by viewModel.isCallDetectionEnabled.collectAsState()
     val isRingModeDetectionEnabled by viewModel.isRingModeDetectionEnabled.collectAsState()
     val isChargingDetectionEnabled by viewModel.isChargingDetectionEnabled.collectAsState()
@@ -466,6 +467,30 @@ fun DynamicIslandDemoScreen(
                                     }
                                 }
                             }
+                        )
+                    }
+
+                    // Detect Music Playback Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Detect Music Playback",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Show currently playing media tracks",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isMusicDetectionEnabled,
+                            onCheckedChange = { viewModel.setMusicDetectionEnabled(it) }
                         )
                     }
 
